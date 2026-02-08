@@ -8,6 +8,7 @@ import {
   Droplets,
   Flame,
   Leaf,
+  Plus,
   Recycle,
   Train,
   TreePine,
@@ -15,6 +16,16 @@ import {
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 
 interface Goal {
@@ -34,14 +45,16 @@ const categoryIcons: Record<string, typeof Leaf> = {
   transport: Train,
   energy: Zap,
   food: Leaf,
+  custom: Plus,
 }
 
 const categoryColors: Record<string, string> = {
-  water: "bg-blue-100 text-blue-700",
-  waste: "bg-amber-100 text-amber-700",
-  transport: "bg-sky-100 text-sky-700",
-  energy: "bg-yellow-100 text-yellow-700",
-  food: "bg-emerald-100 text-emerald-700",
+  water: "bg-sky-100/90 text-sky-800",
+  waste: "bg-slate-100/90 text-slate-700",
+  transport: "bg-cyan-100/90 text-cyan-800",
+  energy: "bg-teal-100/90 text-teal-800",
+  food: "bg-emerald-100/90 text-emerald-800",
+  custom: "bg-indigo-100/90 text-indigo-800",
 }
 
 function GoalCard({
@@ -140,19 +153,88 @@ function GoalCard({
   )
 }
 
+function AddGoalDialog({ onAddGoal }: { onAddGoal: (title: string, description?: string) => void }) {
+  const [open, setOpen] = useState(false)
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) return
+    onAddGoal(trimmedTitle, description.trim() || undefined)
+    setTitle("")
+    setDescription("")
+    setOpen(false)
+  }
+
+
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Card className="border-dashed border-2 border-muted-foreground/30 bg-muted/30 transition-colors hover:border-primary/50 hover:bg-muted/50">
+          <CardContent className="flex flex-col items-center justify-center gap-2 p-6">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10">
+              <Plus className="h-5 w-5 text-primary" />
+            </div>
+            <span className="text-sm font-medium text-muted-foreground">
+              Add your own goal
+            </span>
+            <span className="text-xs text-muted-foreground">
+              +5 trees when completed
+            </span>
+          </CardContent>
+        </Card>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add your own goal</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="goal-title">Goal title</Label>
+            <Input
+              id="goal-title"
+              placeholder="e.g. Bike to work today"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="goal-desc">Description (optional)</Label>
+            <Input
+              id="goal-desc"
+              placeholder="Add a short description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
+          <Button type="submit" className="w-full">
+            Add goal (+5 trees)
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function GoalsScreen({
   goals,
   onToggleGoal,
+  onAddGoal,
   streak,
   totalTrees,
 }: {
   goals: Goal[]
   onToggleGoal: (id: string) => void
+  onAddGoal: (title: string, description?: string) => void
   streak: number
   totalTrees: number
 }) {
   const completed = goals.filter((g) => g.completed).length
-  const percentage = Math.round((completed / goals.length) * 100)
+  const percentage = goals.length > 0 ? Math.round((completed / goals.length) * 100) : 0
 
   return (
     <div className="flex flex-col gap-4 px-4 pb-24 pt-4">
@@ -208,6 +290,7 @@ export function GoalsScreen({
         {goals.map((goal) => (
           <GoalCard key={goal.id} goal={goal} onToggle={onToggleGoal} />
         ))}
+        <AddGoalDialog onAddGoal={onAddGoal} />
       </div>
     </div>
   )

@@ -2,10 +2,11 @@ import React from "react"
 import type { Metadata, Viewport } from 'next'
 import { DM_Sans, Space_Mono } from 'next/font/google'
 
+import { Providers } from '@/components/providers'
 import './globals.css'
 
-const _dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm-sans' })
-const _spaceMono = Space_Mono({ subsets: ['latin'], weight: ['400', '700'], variable: '--font-space-mono' })
+const dmSans = DM_Sans({ subsets: ['latin'], variable: '--font-dm-sans' })
+const spaceMono = Space_Mono({ subsets: ['latin'], weight: ['400', '700'], variable: '--font-space-mono' })
 
 export const metadata: Metadata = {
   title: 'ReGen - Climate Action for Young Adults',
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
 }
 
 export const viewport: Viewport = {
-  themeColor: '#1a8a5c',
+  themeColor: '#1e7a52',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1,
@@ -27,7 +28,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="font-sans antialiased">{children}</body>
+      <body className={`${dmSans.variable} ${spaceMono.variable} font-sans antialiased`}>
+        <Providers>{children}</Providers>
+      </body>
     </html>
   )
 }

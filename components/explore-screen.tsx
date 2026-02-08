@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import {
   ArrowLeft,
   BookOpen,
@@ -11,15 +11,12 @@ import {
   Phone,
   Mail,
   Search,
-  Users,
-  AlertTriangle,
   BarChart3,
-  TreePine,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import {
-  cities,
+  cities as featuredCities,
   cityPosts,
   communityPosts,
   authorities,
@@ -37,16 +34,28 @@ import {
   Cell,
 } from "recharts"
 
+type ApiCity = {
+  id: string
+  name: string
+  country: string
+  countryCode: string
+  latitude: number
+  longitude: number
+  admin1?: string
+}
+
 function CityCard({
   city,
   onClick,
+  subtitle,
 }: {
-  city: (typeof cities)[0]
+  city: { id: string; name: string; country: string; admin1?: string }
   onClick: () => void
+  subtitle?: string
 }) {
   return (
     <Card
-      className="cursor-pointer transition-all hover:border-primary/30 hover:shadow-md"
+      className="cursor-pointer border-primary/15 bg-primary/[0.06] transition-all hover:border-primary/30 hover:shadow-md"
       onClick={onClick}
     >
       <CardContent className="p-4">
@@ -61,16 +70,11 @@ function CityCard({
                 {city.country}
               </span>
             </div>
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Users className="h-3 w-3" />
-                {city.activeUsers.toLocaleString()} active
+            {(city.admin1 || subtitle) && (
+              <span className="text-xs text-muted-foreground">
+                {city.admin1 || subtitle}
               </span>
-              <span className="flex items-center gap-1">
-                <AlertTriangle className="h-3 w-3" />
-                {city.issues} issues
-              </span>
-            </div>
+            )}
           </div>
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
         </div>
@@ -80,7 +84,7 @@ function CityCard({
 }
 
 function ImpactComparison() {
-  const chartData = cities.map((city) => ({
+  const chartData = featuredCities.map((city) => ({
     name: city.name,
     users: city.activeUsers,
     issues: city.issues,
@@ -209,7 +213,7 @@ function EducationSection() {
       : educationResources.filter((r) => r.category === filter)
 
   return (
-    <Card>
+    <Card className="border-primary/15 bg-primary/[0.06]">
       <CardHeader className="px-5 pb-2 pt-5">
         <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
           <BookOpen className="h-4 w-4" />
@@ -240,7 +244,7 @@ function EducationSection() {
             href={resource.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex flex-col gap-1 rounded-lg bg-secondary p-3 transition-all hover:bg-secondary/80"
+            className="flex flex-col gap-1 rounded-lg border border-primary/15 bg-primary/[0.06] p-3 transition-all hover:bg-primary/10"
           >
             <div className="flex items-center justify-between">
               <h4 className="text-sm font-semibold text-foreground">
@@ -261,20 +265,41 @@ function EducationSection() {
 
 export function ExploreScreen({
   onPointsEarned,
+  defaultCity,
 }: {
   onPointsEarned: (amount: number, action: string) => void
+  defaultCity?: string
 }) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [searchResults, setSearchResults] = useState<ApiCity[]>([])
+  const [searching, setSearching] = useState(false)
   const [selectedCity, setSelectedCity] = useState<string | null>(null)
 
-  const filteredCities = cities.filter(
-    (city) =>
-      city.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      city.country.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const fetchCities = useCallback(async (query: string) => {
+    if (query.length < 2) {
+      setSearchResults([])
+      return
+    }
+    setSearching(true)
+    try {
+      const res = await fetch(
+        `/api/search-cities?name=${encodeURIComponent(query)}`
+      )
+      const data = await res.json()
+      setSearchResults(data.results ?? [])
+    } catch {
+      setSearchResults([])
+    } finally {
+      setSearching(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => fetchCities(searchQuery), 300)
+    return () => clearTimeout(t)
+  }, [searchQuery, fetchCities])
 
   if (selectedCity) {
-    const city = cities.find((c) => c.name === selectedCity)
     const posts =
       cityPosts[selectedCity] ||
       (selectedCity === "Patiala" ? communityPosts : [])
@@ -294,12 +319,12 @@ export function ExploreScreen({
           <div className="flex items-center gap-1.5">
             <MapPin className="h-4 w-4 text-primary" />
             <h1 className="text-lg font-bold text-foreground">
-              {city?.name || selectedCity}
+              {selectedCity}
             </h1>
           </div>
         </div>
         <CommunityScreen
-          posts={posts}
+          posts={posts.length > 0 ? posts : communityPosts}
           cityName={selectedCity}
           onPointsEarned={onPointsEarned}
         />
@@ -310,31 +335,53 @@ export function ExploreScreen({
   return (
     <div className="flex flex-col gap-4 px-4 pb-24 pt-4">
       <h1 className="text-xl font-bold text-foreground">Explore</h1>
+      {defaultCity && (
+        <p className="text-sm text-muted-foreground">
+          Your location: <span className="font-medium text-foreground">{defaultCity}</span>
+        </p>
+      )}
 
-      {/* Search */}
+      {/* Search any city via API */}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Search cities..."
+          placeholder="Search any city worldwide..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="w-full rounded-xl border border-border bg-card py-3 pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
 
-      {/* City cards */}
+      {/* Search results from API */}
       <div className="flex flex-col gap-3">
-        {filteredCities.map((city) => (
-          <CityCard
-            key={city.id}
-            city={city}
-            onClick={() => setSelectedCity(city.name)}
-          />
-        ))}
+        {searchQuery.trim().length >= 2 && (
+          <>
+            {searching ? (
+              <p className="text-sm text-muted-foreground">Searching…</p>
+            ) : searchResults.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No cities found. Try a different search.
+              </p>
+            ) : (
+              searchResults.map((city) => (
+                <CityCard
+                  key={city.id}
+                  city={city}
+                  onClick={() => setSelectedCity(city.name)}
+                />
+              ))
+            )}
+          </>
+        )}
+        {searchQuery.trim().length < 2 && (
+          <p className="text-sm text-muted-foreground">
+            Type at least 2 characters to search cities worldwide.
+          </p>
+        )}
       </div>
 
-      {/* Impact chart */}
+      {/* Impact chart (featured cities from mock) */}
       <ImpactComparison />
 
       {/* Education */}

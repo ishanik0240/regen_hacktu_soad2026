@@ -63,6 +63,18 @@ export const dailyGoals = [
 
 export const communityPosts = [
   {
+    id: "movement-cleanliness-1",
+    username: "ReGen Community",
+    avatar: "RC",
+    content: "Join our Cleanliness Drive this Saturday at Baradari Garden! We'll be removing plastic waste and planting saplings. Bring gloves and water. Together we can make Patiala greener.",
+    upvotes: 312,
+    comments: 48,
+    category: "waste",
+    city: "Patiala",
+    timeAgo: "1d ago",
+    movement: { id: "cleanliness-drive-1", name: "Cleanliness Drive" },
+  },
+  {
     id: "1",
     username: "ArjunS",
     avatar: "AS",

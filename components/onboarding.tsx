@@ -1,10 +1,16 @@
 "use client"
 
 import { useState } from "react"
-import { ArrowRight, Leaf, Target, Users } from "lucide-react"
+import { ArrowRight, Leaf, Sparkles, Target, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 const slides = [
+  {
+    icon: Sparkles,
+    title: "Welcome to ReGen",
+    description:
+      "Your personal space to track impact, complete goals, and connect with your community for climate action. Let's get started.",
+  },
   {
     icon: Leaf,
     title: "Track Your Climate Impact",

@@ -1,92 +1,34 @@
 "use client"
 
-import Image from "next/image"
 import {
-  Cloud,
-  Droplets,
-  MapPin,
-  Thermometer,
-  Wind,
   ChevronRight,
+  Thermometer,
   TreePine,
   Lightbulb,
   ArrowUp,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { climateFacts, communityPosts } from "@/lib/mock-data"
+import { WeatherBanner } from "@/components/weather-banner"
+import { climateFacts } from "@/lib/mock-data"
 import { useState, useMemo } from "react"
-
-function WeatherCard() {
-  return (
-    <Card className="relative border-0 overflow-hidden">
-      {/* Background banner image */}
-      <div className="absolute inset-0">
-        <Image
-          src="https://images.unsplash.com/photo-1504386106331-3e4e71712b38?w=800"
-          alt=""
-          fill
-          className="object-cover"
-          sizes="100vw"
-          priority
-        />
-        <div className="absolute inset-0 bg-black/50" />
-      </div>
-      <CardContent className="relative z-10 p-5 text-white">
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1.5 text-sm text-white/80">
-              <MapPin className="h-3.5 w-3.5" />
-              <span>Patiala, Punjab</span>
-            </div>
-            <div className="flex items-baseline gap-1">
-              <span className="text-5xl font-bold">28</span>
-              <span className="text-2xl text-white/80">°C</span>
-            </div>
-            <div className="flex items-center gap-1 text-sm text-white/80">
-              <Cloud className="h-4 w-4" />
-              <span>Partly Cloudy</span>
-            </div>
-          </div>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2 rounded-lg bg-white/15 px-3 py-2 backdrop-blur-sm">
-              <Wind className="h-4 w-4" />
-              <div className="flex flex-col">
-                <span className="text-xs text-white/70">AQI</span>
-                <span className="font-bold">156</span>
-              </div>
-              <span className="rounded-full bg-accent/90 px-2 py-0.5 text-xs font-semibold text-accent-foreground">
-                Moderate
-              </span>
-            </div>
-            <div className="flex items-center gap-2 rounded-lg bg-white/15 px-3 py-2 backdrop-blur-sm">
-              <Droplets className="h-4 w-4" />
-              <div className="flex flex-col">
-                <span className="text-xs text-white/70">Humidity</span>
-                <span className="font-bold">62%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-        <p className="mt-4 rounded-lg bg-white/15 px-3 py-2 text-xs leading-relaxed text-white/90 backdrop-blur-sm">
-          Rising temperatures and deteriorating air quality are direct indicators of climate change. Moderate AQI means sensitive groups should reduce outdoor activity.
-        </p>
-      </CardContent>
-    </Card>
-  )
-}
 
 function GoalsSummaryCard({
   completedGoals,
   totalGoals,
+  onNavigateToGoals,
 }: {
   completedGoals: number
   totalGoals: number
+  onNavigateToGoals: () => void
 }) {
   const percentage = Math.round((completedGoals / totalGoals) * 100)
 
   return (
-    <Card>
+    <Card
+      className="cursor-pointer transition-all hover:border-primary/30 hover:shadow-md"
+      onClick={onNavigateToGoals}
+    >
       <CardContent className="p-5">
         <div className="flex items-center justify-between">
           <div className="flex flex-col gap-1">
@@ -133,13 +75,26 @@ function DidYouKnowCard() {
   )
 }
 
-function TopCommunityPostCard() {
-  const topPost = communityPosts.reduce((best, post) =>
-    post.upvotes > best.upvotes ? post : best
-  )
+function TopCommunityPostCard({
+  posts,
+  onPostClick,
+}: {
+  posts: { id: string; username: string; avatar: string; content: string; upvotes: number; comments: number; category?: string; title?: string; imageUrl?: string }[]
+  onPostClick: (postId: string) => void
+}) {
+  const topPost = posts.length
+    ? posts.reduce((best, post) =>
+        post.upvotes > best.upvotes ? post : best
+      )
+    : null
+
+  if (!topPost) return null
 
   return (
-    <Card>
+    <Card
+      className="cursor-pointer transition-all hover:border-primary/30 hover:shadow-md"
+      onClick={() => onPostClick(topPost.id)}
+    >
       <CardHeader className="flex flex-row items-center justify-between px-5 pb-2 pt-5">
         <CardTitle className="text-sm font-medium text-muted-foreground">
           Top Community Post
@@ -156,13 +111,29 @@ function TopCommunityPostCard() {
               <span className="text-sm font-semibold text-foreground">
                 {topPost.username}
               </span>
-              <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
-                {topPost.category}
-              </span>
+              {topPost.category && (
+                <span className="rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">
+                  {topPost.category}
+                </span>
+              )}
             </div>
+            {topPost.title && (
+              <p className="text-sm font-medium text-foreground line-clamp-1">
+                {topPost.title}
+              </p>
+            )}
             <p className="line-clamp-2 text-sm leading-relaxed text-muted-foreground">
               {topPost.content}
             </p>
+            {topPost.imageUrl && (
+              <div className="relative mt-2 aspect-video w-full overflow-hidden rounded-lg bg-muted">
+                <img
+                  src={topPost.imageUrl}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            )}
             <div className="flex items-center gap-3 pt-1 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <ArrowUp className="h-3 w-3" />
@@ -198,10 +169,18 @@ export function HomeScreen({
   completedGoals,
   totalGoals,
   trees,
+  cityName,
+  communityPosts,
+  onNavigateToGoals,
+  onNavigateToCommunityPost,
 }: {
   completedGoals: number
   totalGoals: number
   trees: number
+  cityName?: string
+  communityPosts?: { id: string; username: string; avatar: string; content: string; upvotes: number; comments: number; category?: string; title?: string; imageUrl?: string }[]
+  onNavigateToGoals?: () => void
+  onNavigateToCommunityPost?: (postId: string) => void
 }) {
   return (
     <div className="flex flex-col gap-4 px-4 pb-24 pt-4">
@@ -212,16 +191,20 @@ export function HomeScreen({
         <h1 className="text-xl font-bold text-foreground">ReGen</h1>
       </div>
 
-      <WeatherCard />
+      <WeatherBanner cityName={cityName} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <GoalsSummaryCard
           completedGoals={completedGoals}
           totalGoals={totalGoals}
+          onNavigateToGoals={onNavigateToGoals ?? (() => {})}
         />
         <TreesCard trees={trees} />
       </div>
       <DidYouKnowCard />
-      <TopCommunityPostCard />
+      <TopCommunityPostCard
+        posts={communityPosts ?? []}
+        onPostClick={onNavigateToCommunityPost ?? (() => {})}
+      />
     </div>
   )
 }

@@ -1,22 +1,41 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   ArrowUp,
   Flag,
+  ImagePlus,
   MapPin,
   MessageCircle,
   Plus,
   Repeat2,
   Send,
   TreePine,
+  Users,
+  UserPlus,
   X,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import {
+  syncContacts,
+  getFriendActivity,
+  type FriendActivityItem,
+} from "@/lib/contactSyncService"
+import { CommunityFeed } from "./community-feed"
 
-interface Post {
+const categoryBadgeColors: Record<string, string> = {
+  water: "bg-emerald-100 text-emerald-800",
+  waste: "bg-green-100 text-green-800",
+  air: "bg-teal-100 text-teal-800",
+  deforestation: "bg-emerald-100 text-emerald-800",
+  transport: "bg-green-100/90 text-green-800",
+  energy: "bg-lime-100 text-lime-800",
+  food: "bg-emerald-100/90 text-emerald-800",
+}
+
+export interface Post {
   id: string
   username: string
   avatar: string
@@ -26,26 +45,23 @@ interface Post {
   category: string
   city: string
   timeAgo: string
+  title?: string
+  imageUrl?: string
+  movement?: { id: string; name: string }
 }
 
-const categoryBadgeColors: Record<string, string> = {
-  water: "bg-blue-100 text-blue-700",
-  waste: "bg-amber-100 text-amber-700",
-  air: "bg-sky-100 text-sky-700",
-  deforestation: "bg-emerald-100 text-emerald-700",
-  transport: "bg-indigo-100 text-indigo-700",
-  energy: "bg-yellow-100 text-yellow-700",
-  food: "bg-lime-100 text-lime-700",
-}
-
-function PostCard({
+export function PostCard({
   post,
   onUpvote,
   onPointsEarned,
+  isSelected,
+  onJoinMovement,
 }: {
   post: Post & { upvoted?: boolean }
   onUpvote: (id: string) => void
   onPointsEarned: (amount: number, action: string) => void
+  isSelected?: boolean
+  onJoinMovement?: (postId: string, movementId: string) => void
 }) {
   const [showComments, setShowComments] = useState(false)
   const [commentText, setCommentText] = useState("")
@@ -53,8 +69,17 @@ function PostCard({
     { user: string; text: string }[]
   >([])
   const [reposted, setReposted] = useState(false)
+  const [joinedMovement, setJoinedMovement] = useState(false)
+  const cardRef = useRef<HTMLDivElement>(null)
   const badgeColor =
     categoryBadgeColors[post.category] || "bg-muted text-muted-foreground"
+
+  useEffect(() => {
+    if (isSelected && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: "smooth", block: "center" })
+      setShowComments(true)
+    }
+  }, [isSelected])
 
   function handleComment() {
     if (!commentText.trim()) return
@@ -72,8 +97,21 @@ function PostCard({
     }
   }
 
+  function handleJoinMovement() {
+    if (post.movement && !joinedMovement) {
+      setJoinedMovement(true)
+      onJoinMovement?.(post.id, post.movement.id)
+    }
+  }
+
   return (
-    <Card>
+    <div ref={cardRef}>
+      <Card
+        className={cn(
+          "border-primary/15 bg-primary/[0.06] transition-all",
+          isSelected && "ring-2 ring-primary/40"
+        )}
+      >
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
@@ -97,9 +135,39 @@ function PostCard({
               </span>
             </div>
 
+            {post.title && (
+              <h4 className="text-sm font-semibold text-foreground">
+                {post.title}
+              </h4>
+            )}
             <p className="text-sm leading-relaxed text-foreground">
               {post.content}
             </p>
+
+            {post.imageUrl && (
+              <div className="overflow-hidden rounded-lg border border-border">
+                <img
+                  src={post.imageUrl}
+                  alt="Post attachment"
+                  className="max-h-64 w-full object-cover"
+                />
+              </div>
+            )}
+
+            {post.movement && (
+              <Button
+                type="button"
+                variant={joinedMovement ? "secondary" : "default"}
+                size="sm"
+                onClick={handleJoinMovement}
+                disabled={joinedMovement}
+                className="mt-1 w-fit gap-1.5"
+              >
+                <Users className="h-3.5 w-3.5" />
+                {joinedMovement ? "Joined" : "Join a Movement"}
+                {joinedMovement && ` · ${post.movement.name}`}
+              </Button>
+            )}
 
             {/* Actions */}
             <div className="flex items-center gap-1 pt-1">
@@ -188,6 +256,7 @@ function PostCard({
         </div>
       </CardContent>
     </Card>
+    </div>
   )
 }
 
@@ -195,10 +264,14 @@ export function CommunityScreen({
   posts,
   cityName,
   onPointsEarned,
+  selectedPostId,
+  onClearSelectedPost,
 }: {
   posts: Post[]
   cityName: string
   onPointsEarned: (amount: number, action: string) => void
+  selectedPostId?: string | null
+  onClearSelectedPost?: () => void
 }) {
   const [localPosts, setLocalPosts] = useState<(Post & { upvoted?: boolean })[]>(
     posts.map((p) => ({ ...p, upvoted: false }))
@@ -206,7 +279,15 @@ export function CommunityScreen({
   const [showNewPost, setShowNewPost] = useState(false)
   const [newPostContent, setNewPostContent] = useState("")
   const [newPostCategory, setNewPostCategory] = useState("waste")
+  const [newPostImage, setNewPostImage] = useState<string | null>(null)
   const [pointsFeedback, setPointsFeedback] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<"feed" | "friends">("feed")
+  const [friendActivity, setFriendActivity] = useState<FriendActivityItem[]>([])
+  const [syncing, setSyncing] = useState(false)
+
+  useEffect(() => {
+    setFriendActivity(getFriendActivity())
+  }, [activeTab])
 
   function showFeedback(msg: string) {
     setPointsFeedback(msg)
@@ -236,12 +317,29 @@ export function CommunityScreen({
       city: cityName,
       timeAgo: "Just now",
       upvoted: false,
+      ...(newPostImage && { imageUrl: newPostImage }),
     }
     setLocalPosts((prev) => [newPost, ...prev])
     setNewPostContent("")
+    setNewPostImage(null)
     setShowNewPost(false)
     onPointsEarned(10, "Created a post")
     showFeedback("+10 Trees for creating a post!")
+  }
+
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const valid = ["image/jpeg", "image/jpg"].includes(file.type)
+    if (!valid) return
+    const reader = new FileReader()
+    reader.onload = () => setNewPostImage(reader.result as string)
+    reader.readAsDataURL(file)
+  }
+
+  function handleJoinMovement(postId: string, _movementId: string) {
+    onPointsEarned(5, "Joined a movement")
+    showFeedback("+5 Trees for joining a movement!")
   }
 
   function handlePointsFeedback(amount: number, action: string) {
@@ -249,24 +347,85 @@ export function CommunityScreen({
     onPointsEarned(amount, action)
   }
 
+  async function handleSyncContacts() {
+    setSyncing(true)
+    try {
+      const { matchedCount, friends } = await syncContacts()
+      setFriendActivity(getFriendActivity())
+      setActiveTab("friends")
+      showFeedback(
+        matchedCount > 0
+          ? `Synced! ${matchedCount} friend${matchedCount === 1 ? "" : "s"} on ReGen`
+          : "No contacts matched. Try again later."
+      )
+    } catch {
+      showFeedback("Could not sync contacts.")
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4 px-4 pb-24 pt-4">
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col">
-          <h1 className="text-xl font-bold text-foreground">Community</h1>
-          <div className="flex items-center gap-1 text-sm text-muted-foreground">
-            <MapPin className="h-3.5 w-3.5" />
-            {cityName}
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <div className="flex flex-col">
+            <h1 className="text-xl font-bold text-foreground">Community</h1>
+            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5" />
+              {cityName}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSyncContacts}
+              disabled={syncing}
+              className="gap-1.5 rounded-full"
+            >
+              <UserPlus className="h-4 w-4" />
+              {syncing ? "Syncing…" : "Sync Contacts"}
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setShowNewPost(true)}
+              className="gap-1.5 rounded-full"
+            >
+              <Plus className="h-4 w-4" />
+              New Post
+            </Button>
           </div>
         </div>
-        <Button
-          size="sm"
-          onClick={() => setShowNewPost(true)}
-          className="gap-1.5 rounded-full"
-        >
-          <Plus className="h-4 w-4" />
-          New Post
-        </Button>
+        <div className={cn("flex gap-1 rounded-xl bg-secondary p-1")}>
+          <button
+            type="button"
+            onClick={() => setActiveTab("feed")}
+            className={cn(
+              "flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all",
+              activeTab === "feed"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Feed
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("friends")
+              setFriendActivity(getFriendActivity())
+            }}
+            className={cn(
+              "flex-1 rounded-lg px-4 py-2 text-sm font-medium transition-all",
+              activeTab === "friends"
+                ? "bg-card text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            Friends Activity
+          </button>
+        </div>
       </div>
 
       {/* Points feedback toast */}
@@ -281,7 +440,7 @@ export function CommunityScreen({
 
       {/* New post form */}
       {showNewPost && (
-        <Card className="border-primary/30">
+        <Card className="border-primary/30 bg-primary/[0.06]">
           <CardContent className="flex flex-col gap-3 p-4">
             <div className="flex items-center justify-between">
               <h3 className="font-semibold text-foreground">Create Post</h3>
@@ -297,6 +456,34 @@ export function CommunityScreen({
               rows={3}
               className="rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             />
+            <div className="flex flex-col gap-2">
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                <ImagePlus className="h-4 w-4" />
+                <span>Add image (optional, .jpg / .jpeg)</span>
+                <input
+                  type="file"
+                  accept=".jpg,.jpeg,image/jpeg,image/jpg"
+                  onChange={handleImageChange}
+                  className="hidden"
+                />
+              </label>
+              {newPostImage && (
+                <div className="relative inline-block max-w-[200px]">
+                  <img
+                    src={newPostImage}
+                    alt="Preview"
+                    className="rounded-lg border border-border object-cover max-h-24"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setNewPostImage(null)}
+                    className="absolute -right-1 -top-1 rounded-full bg-muted p-0.5"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               <select
                 value={newPostCategory}
@@ -328,17 +515,75 @@ export function CommunityScreen({
         </Card>
       )}
 
-      {/* Posts feed */}
-      <div className="flex flex-col gap-3">
-        {localPosts.map((post) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            onUpvote={handleUpvote}
-            onPointsEarned={handlePointsFeedback}
-          />
-        ))}
-      </div>
+      {/* Feed tab */}
+      {activeTab === "feed" && (
+        <CommunityFeed
+          posts={localPosts}
+          selectedPostId={selectedPostId}
+          onUpvote={handleUpvote}
+          onPointsEarned={handlePointsFeedback}
+          onJoinMovement={handleJoinMovement}
+        />
+      )}
+
+      {/* Friends Activity tab */}
+      {activeTab === "friends" && (
+        <div className="flex flex-col gap-3">
+          {friendActivity.length === 0 ? (
+            <Card className="border-primary/15 bg-primary/[0.06]">
+              <CardContent className="flex flex-col items-center gap-3 py-8">
+                <Users className="h-12 w-12 text-muted-foreground" />
+                <p className="text-center text-sm text-muted-foreground">
+                  Sync your contacts to see what friends are doing on ReGen.
+                </p>
+                <Button
+                  size="sm"
+                  onClick={handleSyncContacts}
+                  disabled={syncing}
+                  className="gap-1.5"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  {syncing ? "Syncing…" : "Sync Contacts"}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            friendActivity.map((item) => (
+              <Card
+                key={item.id}
+                className="border-primary/15 bg-primary/[0.06] transition-all"
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
+                      {item.avatar ?? item.name.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-foreground">{item.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {item.title}
+                      </p>
+                      {item.image && (
+                        <div className="mt-2 overflow-hidden rounded-lg border border-border">
+                          <img
+                            src={item.image}
+                            alt=""
+                            loading="lazy"
+                            className="h-36 w-full object-cover"
+                          />
+                        </div>
+                      )}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.timestamp}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

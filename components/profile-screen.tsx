@@ -4,13 +4,12 @@ import { useState } from "react"
 import {
   ArrowUp,
   Calendar,
-  Edit3,
   Leaf,
   LogOut,
   Mail,
   MessageCircle,
+  Share2,
   TreePine,
-  User,
 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -20,7 +19,6 @@ import { cn } from "@/lib/utils"
 interface ProfileData {
   name: string
   email: string
-  dob: string
   totalTrees: number
   goalsCompleted: number
   streak: number
@@ -131,6 +129,21 @@ function ActivityTab({
   )
 }
 
+function getShareText(
+  type: "streak" | "trees" | "both",
+  profile: ProfileData
+): string {
+  const parts: string[] = []
+  if (type === "streak" || type === "both") {
+    parts.push(`${profile.streak} day streak on ReGen`)
+  }
+  if (type === "trees" || type === "both") {
+    parts.push(`${profile.totalTrees} trees earned`)
+  }
+  const text = parts.join(" · ")
+  return `I've got a ${text}! Join me in taking climate action. 🌱 #ReGen #ClimateAction`
+}
+
 export function ProfileScreen({
   profile,
   onLogout,
@@ -139,6 +152,28 @@ export function ProfileScreen({
   onLogout: () => void
 }) {
   const [activeTab, setActiveTab] = useState("posts")
+
+  function handleShare(type: "streak" | "trees") {
+    const text = getShareText(type, profile)
+    const shareData = {
+      text,
+      title: "ReGen – My climate impact",
+      url: typeof window !== "undefined" ? window.location.origin : "",
+    }
+    if (typeof navigator !== "undefined" && navigator.share) {
+      navigator.share(shareData).catch(() => {
+        copyToClipboard(text)
+      })
+    } else {
+      copyToClipboard(text)
+    }
+  }
+
+  function copyToClipboard(text: string) {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text)
+    }
+  }
 
   const level =
     profile.totalTrees < 100
@@ -171,7 +206,7 @@ export function ProfileScreen({
   const sampleUpvoted = [
     {
       id: "3",
-      username: "PriyaK",
+      username: "ABCDEFG C",
       content:
         "Planted 15 saplings near Rajindra Hospital with the ReGen community!",
       upvotes: 89,
@@ -187,7 +222,7 @@ export function ProfileScreen({
     },
     {
       id: "5",
-      username: "KamalJ",
+      username: "ABCDEFG",
       content:
         "Groundwater table has dropped 3 meters. We need rainwater harvesting!",
       upvotes: 178,
@@ -227,12 +262,41 @@ export function ProfileScreen({
               <Mail className="h-3.5 w-3.5" />
               {profile.email}
             </div>
-            {profile.dob && (
-              <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Calendar className="h-3.5 w-3.5" />
-                {profile.dob}
-              </div>
-            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Socials / Share */}
+      <Card className="border-primary/15 bg-primary/[0.06]">
+        <CardHeader className="px-5 pb-2 pt-5">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Share2 className="h-4 w-4" />
+            Share your impact
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 px-5 pb-5">
+          <p className="text-xs text-muted-foreground">
+            Share your streak and trees earned on social media.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleShare("streak")}
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              Share streak
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => handleShare("trees")}
+            >
+              <TreePine className="h-3.5 w-3.5" />
+              Share trees
+            </Button>
           </div>
         </CardContent>
       </Card>
